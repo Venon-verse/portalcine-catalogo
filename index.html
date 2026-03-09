@@ -77,12 +77,13 @@
         }
 
         function comprarFilme(filmeId) {
-            // Este comando fecha o catálogo e avisa ao bot qual filme o cliente escolheu
-            // Se o username do seu bot não for PortalCine_Bot, mude aqui embaixo:
-            tg.openTelegramLink('https://t.me/PortalCine_Bot?start=comprar_' + filmeId);
-        }
+    // Esse comando fecha o catálogo e envia o ID do filme para o seu Bot processar
+    tg.openTelegramLink('https://t.me/PortalCine_Bot?start=comprar_' + filmeId);
+    tg.close(); // Fecha o Mini App imediatamente
+}
 
         carregarFilmes();
     </script>
 </body>
 </html>
+
