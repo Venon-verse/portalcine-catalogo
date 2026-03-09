@@ -5,81 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PortalCine Catálogo</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+
     <style>
-        body {
-            background-color: #0f0f0f;
-            color: white;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        header {
-            width: 100%;
-            padding: 15px;
-            background-color: #1c1c1c;
-            text-align: center;
-            border-bottom: 2px solid #e50914; /* Destaque em vermelho estilo Netflix */
-        }
-        h1 {
-            margin: 0;
-            font-size: 24px;
-        }
-        .categorias {
-            display: flex;
-            gap: 15px;
-            padding: 15px;
-            overflow-x: auto;
-            width: 100%;
-            justify-content: center;
-        }
-        .categoria-btn {
-            background-color: #333;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .categoria-btn.ativo {
-            background-color: #e50914;
-        }
-        .filmes-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr); /* 2 filmes por linha */
-            gap: 15px;
-            padding: 15px;
-            width: 90%;
-            max-width: 400px;
-        }
-        .filme-card {
-            background-color: #222;
-            border-radius: 8px;
-            overflow: hidden;
-            text-align: center;
-            padding-bottom: 10px;
-        }
-        .filme-card img {
-            width: 100%;
-            height: auto;
-        }
-        .filme-titulo {
-            margin: 10px 0 5px;
-            font-size: 14px;
-        }
-        .comprar-btn {
-            background-color: #e50914;
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            width: 80%;
-        }
+        body { background-color: #0f0f0f; color: white; font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; }
+        header { width: 100%; padding: 15px; background-color: #1c1c1c; text-align: center; border-bottom: 2px solid #e50914; }
+        h1 { margin: 0; font-size: 24px; }
+        .categorias { display: flex; gap: 15px; padding: 15px; overflow-x: auto; width: 100%; justify-content: center; }
+        .categoria-btn { background-color: #333; color: white; border: none; padding: 10px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        .categoria-btn.ativo { background-color: #e50914; }
+        .filmes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 15px; width: 90%; max-width: 400px; }
+        .filme-card { background-color: #222; border-radius: 8px; overflow: hidden; text-align: center; padding-bottom: 10px; }
+        .filme-card img { width: 100%; height: auto; aspect-ratio: 2/3; object-fit: cover; }
+        .filme-titulo { margin: 10px 0 5px; font-size: 14px; padding: 0 5px; }
+        .comprar-btn { background-color: #e50914; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 80%; }
     </style>
 </head>
 <body>
@@ -88,29 +29,77 @@
         <h1>PortalCine</h1>
     </header>
 
-    <div class="categorias">
-        <button class="categoria-btn ativo">Ação</button>
-        <button class="categoria-btn">Romance</button>
-        <button class="categoria-btn">Dorama</button>
+    <div class="categorias" id="categorias-container">
+        <button class="categoria-btn ativo">Todos</button>
     </div>
 
-    <div class="filmes-grid">
-        <div class="filme-card">
-            <img src="https://via.placeholder.com/150x220/333/fff?text=Capa+Filme+1" alt="Filme 1">
-            <h3 class="filme-titulo">Filme de Ação</h3>
-            <button class="comprar-btn">R$ 5,00</button>
-        </div>
-         <div class="filme-card">
-            <img src="https://via.placeholder.com/150x220/333/fff?text=Capa+Filme+2" alt="Filme 2">
-            <h3 class="filme-titulo">Outro Filme</h3>
-            <button class="comprar-btn">R$ 5,00</button>
-        </div>
+    <div class="filmes-grid" id="filmes-container">
+        <p>Carregando filmes...</p>
     </div>
 
     <script>
-        // Inicializa o Web App do Telegram
+        // Inicializa o Telegram Mini App
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Faz o app abrir ocupando mais espaço na tela
+        tg.expand();
+
+        // 🔥 ATENÇÃO: COLE O SEU CÓDIGO DO FIREBASE AQUI EMBAIXO 🔥
+        const firebaseConfig = {
+  apiKey: "AIzaSyBVtBZv2oN0o0KxhCNX6YabaFjTNthL5HI",
+  authDomain: "portalcine-bot.firebaseapp.com",
+  projectId: "portalcine-bot",
+  storageBucket: "portalcine-bot.firebasestorage.app",
+  messagingSenderId: "779561108275",
+  appId: "1:779561108275:web:12496fa1a1ec4d990d7446"
+};
+        // 🔥 ATÉ AQUI 🔥
+
+        // Inicializa o Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const filmesContainer = document.getElementById('filmes-container');
+
+        // Função para buscar e mostrar os filmes na tela
+        async function carregarFilmes() {
+            try {
+                // Puxa todos os filmes cadastrados lá no Firestore
+                const snapshot = await db.collection('filmes').get();
+                
+                if (snapshot.empty) {
+                    filmesContainer.innerHTML = '<p>Nenhum filme encontrado.</p>';
+                    return;
+                }
+
+                filmesContainer.innerHTML = ''; // Limpa a mensagem "Carregando..."
+
+                // Passa por cada filme encontrado no banco e cria o cartão dele
+                snapshot.forEach(doc => {
+                    const filme = doc.data();
+                    const filmeCard = document.createElement('div');
+                    filmeCard.className = 'filme-card';
+                    
+                    // Imagem provisória com o nome do filme (explicarei isso depois!)
+                    const imagemUrl = 'https://via.placeholder.com/150x220/333/fff?text=' + encodeURIComponent(filme.titulo);
+
+                    filmeCard.innerHTML = `
+                        <img src="${imagemUrl}" alt="${filme.titulo}">
+                        <h3 class="filme-titulo">${filme.titulo}</h3>
+                        <button class="comprar-btn" onclick="comprarFilme('${doc.id}', '${filme.titulo}')">R$ ${filme.preco.toFixed(2)}</button>
+                    `;
+
+                    filmesContainer.appendChild(filmeCard);
+                });
+            } catch (error) {
+                console.error("Erro ao buscar filmes:", error);
+                filmesContainer.innerHTML = '<p>Erro ao carregar o catálogo.</p>';
+            }
+        }
+
+        // Função que é acionada ao clicar em Comprar
+        function comprarFilme(filmeId, titulo) {
+            tg.showAlert(`Você escolheu: ${titulo}. A integração de pagamento vem aí!`);
+        }
+
+        carregarFilmes();
     </script>
 </body>
 </html>
