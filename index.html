@@ -12,78 +12,121 @@
         header { width: 100%; padding: 15px; background-color: #1c1c1c; text-align: center; border-bottom: 2px solid #e50914; }
         h1 { margin: 0; font-size: 24px; }
         .categorias { display: flex; gap: 15px; padding: 15px; overflow-x: auto; width: 100%; justify-content: center; }
-        .categoria-btn { background-color: #333; color: white; border: none; padding: 10px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        .categoria-btn { background-color: #333; color: white; border: none; padding: 10px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         .categoria-btn.ativo { background-color: #e50914; }
         .filmes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 15px; width: 90%; max-width: 400px; }
         .filme-card { background-color: #222; border-radius: 8px; overflow: hidden; text-align: center; padding-bottom: 10px; }
-        /* Adicionado fundo escuro caso a imagem demore a carregar */
         .filme-card img { width: 100%; height: auto; aspect-ratio: 2/3; object-fit: cover; background-color: #333; }
         .filme-titulo { margin: 10px 0 5px; font-size: 14px; padding: 0 5px; }
         .comprar-btn { background-color: #e50914; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 80%; }
+        .comprar-btn.gratis { background-color: #28a745; } /* Cor verde para filmes grátis */
     </style>
 </head>
 <body>
     <header><h1>PortalCine</h1></header>
+    
     <div class="categorias" id="categorias-container">
-        <button class="categoria-btn ativo">Todos</button>
+        <button class="categoria-btn ativo" onclick="filtrarCategoria('Todos', this)">Todos</button>
+        <button class="categoria-btn" onclick="filtrarCategoria('Filme', this)">Filmes</button>
+        <button class="categoria-btn" onclick="filtrarCategoria('Série', this)">Séries</button>
+        <button class="categoria-btn" onclick="filtrarCategoria('Dorama', this)">Doramas</button>
     </div>
-    <div class="filmes-grid" id="filmes-container"><p>Carregando filmes...</p></div>
+    
+    <div class="filmes-grid" id="filmes-container"><p>A carregar o catálogo...</p></div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // 🔥 ATENÇÃO: COLE SUA CONFIGURAÇÃO DO FIREBASE AQUI NOVAMENTE 🔥
         const firebaseConfig = {
-  apiKey: "AIzaSyBVtBZv2oN0o0KxhCNX6YabaFjTNthL5HI",
-  authDomain: "portalcine-bot.firebaseapp.com",
-  projectId: "portalcine-bot",
-  storageBucket: "portalcine-bot.firebasestorage.app",
-  messagingSenderId: "779561108275",
-  appId: "1:779561108275:web:12496fa1a1ec4d990d7446"
-};
+            apiKey: "AIzaSyBVtBZv2oN0o0KxhCNX6YabaFjTNthL5HI",
+            authDomain: "portalcine-bot.firebaseapp.com",
+            projectId: "portalcine-bot",
+            storageBucket: "portalcine-bot.firebasestorage.app",
+            messagingSenderId: "779561108275",
+            appId: "1:779561108275:web:12496fa1a1ec4d990d7446"
+        };
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const filmesContainer = document.getElementById('filmes-container');
+        
+        let catalogoCompleto = []; // Memória do catálogo
 
         async function carregarFilmes() {
             try {
                 const snapshot = await db.collection('filmes').get();
                 if (snapshot.empty) {
-                    filmesContainer.innerHTML = '<p>Nenhum filme encontrado.</p>';
+                    filmesContainer.innerHTML = '<p>Nenhum título encontrado.</p>';
                     return;
                 }
-                filmesContainer.innerHTML = '';
+                
                 snapshot.forEach(doc => {
-                    const filme = doc.data();
-                    const filmeCard = document.createElement('div');
-                    filmeCard.className = 'filme-card';
-                    
-                    // Puxa a capa real. Se não tiver, usa um gerador de imagens mais seguro
-                    const imagemUrl = filme.urlCapa || ('https://placehold.co/150x220/333/fff?text=' + encodeURIComponent(filme.titulo));
-
-                    filmeCard.innerHTML = `
-                        <img src="${imagemUrl}" alt="${filme.titulo}">
-                        <h3 class="filme-titulo">${filme.titulo}</h3>
-                        <button class="comprar-btn" onclick="comprarFilme('${doc.id}')">R$ ${filme.preco.toFixed(2)}</button>
-                    `;
-                    filmesContainer.appendChild(filmeCard);
+                    catalogoCompleto.push({ id: doc.id, ...doc.data() });
                 });
+                
+                renderizarCatalogo('Todos'); // Mostra tudo ao abrir
             } catch (error) {
                 console.error("Erro:", error);
                 filmesContainer.innerHTML = '<p>Erro ao carregar o catálogo.</p>';
             }
         }
 
+        function renderizarCatalogo(filtro) {
+            filmesContainer.innerHTML = '';
+            
+            // Lógica inteligente de filtro
+            const itensFiltrados = catalogoCompleto.filter(item => {
+                if (filtro === 'Todos') return true;
+                
+                const cat = item.categoria.toLowerCase();
+                if (filtro === 'Série') return cat === 'série' || cat === 'serie';
+                if (filtro === 'Dorama') return cat === 'dorama';
+                
+                // Se o filtro for "Filme", pega tudo que NÃO for série nem dorama (ex: Ação, Terror, etc)
+                if (filtro === 'Filme') return cat !== 'série' && cat !== 'serie' && cat !== 'dorama'; 
+                
+                return false;
+            });
+
+            if (itensFiltrados.length === 0) {
+                filmesContainer.innerHTML = '<p>Nenhum título nesta categoria.</p>';
+                return;
+            }
+
+            itensFiltrados.forEach(item => {
+                const imagemUrl = item.urlCapa || ('https://placehold.co/150x220/333/fff?text=' + encodeURIComponent(item.titulo));
+                
+                // Formata o preço e a cor do botão se for grátis
+                const ehGratis = item.preco === 0;
+                const precoDisplay = ehGratis ? "🎁 GRÁTIS" : `R$ ${item.preco.toFixed(2)}`;
+                const classeBotao = ehGratis ? "comprar-btn gratis" : "comprar-btn";
+
+                const card = document.createElement('div');
+                card.className = 'filme-card';
+                card.innerHTML = `
+                    <img src="${imagemUrl}" alt="${item.titulo}">
+                    <h3 class="filme-titulo">${item.titulo}</h3>
+                    <button class="${classeBotao}" onclick="comprarFilme('${item.id}')">${precoDisplay}</button>
+                `;
+                filmesContainer.appendChild(card);
+            });
+        }
+
+        function filtrarCategoria(categoria, elementoBtn) {
+            // Remove o vermelho de todos os botões e pinta o que foi clicado
+            document.querySelectorAll('.categoria-btn').forEach(btn => btn.classList.remove('ativo'));
+            elementoBtn.classList.add('ativo');
+            
+            renderizarCatalogo(categoria);
+        }
+
         function comprarFilme(filmeId) {
-    // Esse comando fecha o catálogo e envia o ID do filme para o seu Bot processar
-    tg.openTelegramLink('https://t.me/PortalCine_Bot?start=comprar_' + filmeId);
-    tg.close(); // Fecha o Mini App imediatamente
-}
+            tg.openTelegramLink('https://t.me/PortalCine_Bot?start=comprar_' + filmeId);
+            tg.close();
+        }
 
         carregarFilmes();
     </script>
 </body>
 </html>
-
