@@ -6,7 +6,6 @@ const { MercadoPagoConfig, Payment } = require('mercadopago');
 const express = require('express');
 const axios = require('axios');
 
-// Inicializações
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -14,13 +13,8 @@ const mpClient = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKE
 const payment = new Payment(mpClient);
 
 const urlDoCatalogo = 'https://venon-verse.github.io/portalcine-catalogo/';
-
-// 🔥 LINK DA RENDER CONFIGURADO 🔥
 const LINK_DA_RENDER = 'https://portalcine-bot-online.onrender.com';
 
-// ==========================================
-// SERVIDOR WEB E WEBHOOK (Ouvido Biônico)
-// ==========================================
 const app = express();
 app.use(express.json()); 
 
@@ -29,15 +23,12 @@ app.get('/', (req, res) => res.send('PortalCine Bot está Online na Nuvem!'));
 app.post('/webhook', async (req, res) => {
     res.sendStatus(200);
     const { type, data } = req.body;
-    
     if (type === 'payment' && data && data.id) {
         try {
             const statusPgto = await payment.get({ id: data.id });
-            
             if (statusPgto.status === 'approved') {
                 const [chatIdStr, filmeId] = statusPgto.external_reference.split('_');
                 const chatId = parseInt(chatIdStr);
-
                 const doc = await db.collection('filmes').doc(filmeId).get();
                 if (!doc.exists) return; 
                 const filme = doc.data();
@@ -46,16 +37,12 @@ app.post('/webhook', async (req, res) => {
                 const imagem = filme.urlCapa || `https://placehold.co/300x450/222/fff?text=${encodeURIComponent(filme.titulo)}`;
 
                 await bot.telegram.sendPhoto(chatId, imagem, {
-                    caption: `🎉 *PAGAMENTO APROVADO!*\n\nMuito obrigado pela compra! 🍿\nVocê adquiriu o acesso vitalício a: *${filme.titulo}*\n\n👇 *SEU ACESSO EXCLUSIVO:*\nClique no botão abaixo para entrar no canal.\n\n⚠️ *Atenção:* Este link é único e só funciona para si (1 uso).`,
+                    caption: `🎉 *PAGAMENTO APROVADO!*\n\nMuito obrigado pela compra! 🍿\nVocê adquiriu o acesso vitalício a: *${filme.titulo}*\n\n👇 *SEU ACESSO EXCLUSIVO:*\nClique no botão abaixo para entrar no canal.\n\n⚠️ *Atenção:* Este link é único e só funciona para você (1 uso).`,
                     parse_mode: 'Markdown',
-                    ...Markup.inlineKeyboard([
-                        [Markup.button.url('🎬 ENTRAR NO CANAL DO FILME', link.invite_link)]
-                    ])
+                    ...Markup.inlineKeyboard([[Markup.button.url('🎬 ENTRAR NO CANAL', link.invite_link)]])
                 });
             }
-        } catch (error) {
-            console.error("Erro no Webhook:", error);
-        }
+        } catch (error) { console.error("Erro no Webhook:", error); }
     }
 });
 
@@ -63,46 +50,58 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor a escutar na porta ${PORT}`));
 
 // ==========================================
-// CADASTRO DE FILMES PELO TELEGRAM
+// CADASTRO COM SUPORTE A TRAILER
 // ==========================================
 bot.on('photo', async (ctx) => {
     const legenda = ctx.message.caption || '';
-    if (legenda.startsWith('/filmes add')) {
+    const partes = legenda.split(' ');
+    const comando = partes[0].toLowerCase();
+
+    if (comando === '/filme' || comando === '/serie' || comando === '/série' || comando === '/dorama') {
         try {
-            const partes = legenda.split(' ');
-            if (partes.length >= 6) {
-                const [,, categoria, preco, idGrupo, ...nome] = partes;
-                const titulo = nome.join(' ');
-                const msg = await ctx.reply('⏳ A processar capa e enviar para o banco de dados...');
+            let categoria, preco, idGrupo, nomeArray;
 
-                const photoId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-                const fileLink = await ctx.telegram.getFileLink(photoId);
-                const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
-                const imgBase64 = Buffer.from(response.data).toString('base64');
-
-                const imgbb = await axios.post(`https://api.imgbb.com/1/upload?key=${process.env.IMGBB_KEY}`, new URLSearchParams({ image: imgBase64 }));
-                
-                await db.collection('filmes').add({
-                    titulo, categoria, idGrupo, 
-                    preco: parseFloat(preco), 
-                    urlCapa: imgbb.data.data.url,
-                    dataCadastro: admin.firestore.FieldValue.serverTimestamp()
-                });
-
-                await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ "${titulo}" registado com sucesso!`);
-            } else {
-                ctx.reply('❌ Formato incorreto. Use: /filmes add [Categoria] [Preco] [IdGrupo] [Titulo]');
+            if (comando === '/filme') {
+                if (partes.length < 5) return ctx.reply('❌ Formato: /filme [Categoria] [Preço] [IdGrupo] [Título] [LinkTrailer Opcional]');
+                categoria = partes[1]; preco = partes[2]; idGrupo = partes[3]; nomeArray = partes.slice(4);
+            } else if (comando === '/serie' || comando === '/série') {
+                if (partes.length < 4) return ctx.reply('❌ Formato: /serie [Preço] [IdGrupo] [Título] [LinkTrailer Opcional]');
+                categoria = 'Série'; preco = partes[1]; idGrupo = partes[2]; nomeArray = partes.slice(3);
+            } else if (comando === '/dorama') {
+                if (partes.length < 4) return ctx.reply('❌ Formato: /dorama [Preço] [IdGrupo] [Título] [LinkTrailer Opcional]');
+                categoria = 'Dorama'; preco = partes[1]; idGrupo = partes[2]; nomeArray = partes.slice(3);
             }
-        } catch (e) { 
-            console.error(e);
-            ctx.reply('❌ Erro no registo.'); 
-        }
+
+            // 🚨 MÁGICA DO TRAILER AQUI: Procura se tem um link no final do título
+            let urlTrailer = "";
+            const linkIndex = nomeArray.findIndex(texto => texto.includes('http'));
+            if (linkIndex !== -1) {
+                urlTrailer = nomeArray[linkIndex];
+                nomeArray.splice(linkIndex, 1); // Tira o link do título para não ficar feio
+            }
+
+            const titulo = nomeArray.join(' ');
+            const msg = await ctx.reply(`⏳ A processar capa de "${titulo}"...`);
+
+            const photoId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+            const fileLink = await ctx.telegram.getFileLink(photoId);
+            const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
+            const imgBase64 = Buffer.from(response.data).toString('base64');
+            const imgbb = await axios.post(`https://api.imgbb.com/1/upload?key=${process.env.IMGBB_KEY}`, new URLSearchParams({ image: imgBase64 }));
+            
+            await db.collection('filmes').add({
+                titulo, categoria, idGrupo, 
+                preco: parseFloat(preco), 
+                urlCapa: imgbb.data.data.url,
+                urlTrailer, // Salva o trailer no banco!
+                dataCadastro: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ "${titulo}" registado!${urlTrailer ? ' (Com Trailer)' : ''}`);
+        } catch (e) { ctx.reply('❌ Erro no registo. Verifique os dados.'); }
     }
 });
 
-// ==========================================
-// COMANDOS DE COMPRA E CATÁLOGO
-// ==========================================
 bot.start(async (ctx) => {
     const payload = ctx.startPayload;
     if (payload && payload.startsWith('comprar_')) {
@@ -110,7 +109,6 @@ bot.start(async (ctx) => {
         const doc = await db.collection('filmes').doc(filmeId).get();
         const filme = doc.data();
         
-        // 🚨 VERIFICA SE É GRATUITO AQUI 🚨
         if (filme.preco === 0) {
             return ctx.reply(`🍿 *Filme:* ${filme.titulo}\n🎁 *Valor:* TOTALMENTE GRÁTIS!`, 
                 Markup.inlineKeyboard([[Markup.button.callback('🎁 Resgatar Acesso Grátis', `pagar_${filmeId}`)]]));
@@ -128,42 +126,26 @@ bot.action(/pagar_(.+)/, async (ctx) => {
         const doc = await db.collection('filmes').doc(filmeId).get();
         const filme = doc.data();
         
-        // 🚨 ENTREGA IMEDIATA SE FOR GRATUITO 🚨
         if (filme.preco === 0) {
             await ctx.reply('⏳ A gerar o seu acesso gratuito...');
-            
             const link = await bot.telegram.createChatInviteLink(filme.idGrupo, { member_limit: 1 });
             const imagem = filme.urlCapa || `https://placehold.co/300x450/222/fff?text=${encodeURIComponent(filme.titulo)}`;
-
             await bot.telegram.sendPhoto(ctx.chat.id, imagem, {
-                caption: `🎉 *ACESSO GRATUITO LIBERADO!*\n\nMuito obrigado por usar o nosso bot! 🍿\nResgatou o acesso vitalício a: *${filme.titulo}*\n\n👇 *SEU ACESSO EXCLUSIVO:*\nClique no botão abaixo para entrar no canal.\n\n⚠️ *Atenção:* Este link é único e só funciona para si (1 uso).`,
+                caption: `🎉 *ACESSO GRATUITO LIBERADO!*\n\nResgatou o acesso a: *${filme.titulo}*`,
                 parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([
-                    [Markup.button.url('🎬 ENTRAR NO CANAL DO FILME', link.invite_link)]
-                ])
+                ...Markup.inlineKeyboard([[Markup.button.url('🎬 ENTRAR NO CANAL', link.invite_link)]])
             });
-            return; // Termina a função aqui para não gerar o PIX!
+            return; 
         }
 
-        // SE NÃO FOR GRATUITO, GERA O PIX NORMALMENTE
         const body = {
-            transaction_amount: filme.preco,
-            description: `PortalCine: ${filme.titulo}`,
-            payment_method_id: 'pix',
-            payer: { email: 'suporte@portalcine.com' },
-            external_reference: `${ctx.chat.id}_${filmeId}`, 
-            notification_url: `${LINK_DA_RENDER}/webhook` 
+            transaction_amount: filme.preco, description: `PortalCine: ${filme.titulo}`, payment_method_id: 'pix',
+            payer: { email: 'suporte@portalcine.com' }, external_reference: `${ctx.chat.id}_${filmeId}`, notification_url: `${LINK_DA_RENDER}/webhook` 
         };
-
         const response = await payment.create({ body });
-        const copiaCola = response.point_of_interaction.transaction_data.qr_code;
-
-        await ctx.reply(`\`${copiaCola}\``, { parse_mode: 'Markdown' });
-        await ctx.reply('⏳ *A aguardar pagamento...* Pode fechar o Telegram, nós avisaremos quando o pagamento for compensado!');
-
-    } catch (error) {
-        ctx.reply('❌ Erro ao gerar acesso ou PIX.');
-    }
+        await ctx.reply(`\`${response.point_of_interaction.transaction_data.qr_code}\``, { parse_mode: 'Markdown' });
+        await ctx.reply('⏳ *A aguardar pagamento...*');
+    } catch (error) { ctx.reply('❌ Erro ao gerar PIX.'); }
 });
 
-bot.launch().then(() => console.log('🚀 PortalCine Master Online com Webhook e Filmes Grátis!'));
+bot.launch().then(() => console.log('🚀 PortalCine Online!'));
