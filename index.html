@@ -17,9 +17,18 @@
         .filmes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 15px; width: 90%; max-width: 400px; }
         .filme-card { background-color: #222; border-radius: 8px; overflow: hidden; text-align: center; padding-bottom: 10px; }
         .filme-card img { width: 100%; height: auto; aspect-ratio: 2/3; object-fit: cover; background-color: #333; }
-        .filme-titulo { margin: 10px 0 5px; font-size: 14px; padding: 0 5px; }
-        .comprar-btn { background-color: #e50914; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 80%; }
-        .comprar-btn.gratis { background-color: #28a745; } /* Cor verde para filmes grátis */
+        .filme-titulo { margin: 10px 0 5px; font-size: 14px; padding: 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        /* Novos botões divididos */
+        .botoes-container { display: flex; gap: 5px; padding: 0 5px; }
+        .comprar-btn { background-color: #e50914; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1; font-size: 12px; }
+        .comprar-btn.gratis { background-color: #28a745; }
+        .trailer-btn { background-color: #444; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1; font-size: 12px; }
+
+        /* Janela do Trailer (Modal) */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; z-index: 1000; flex-direction: column; }
+        .modal-content { width: 90%; max-width: 500px; }
+        .fechar-modal { color: white; font-size: 30px; align-self: flex-end; cursor: pointer; margin-bottom: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -34,96 +43,96 @@
     
     <div class="filmes-grid" id="filmes-container"><p>A carregar o catálogo...</p></div>
 
+    <div id="trailer-modal" class="modal">
+        <div class="modal-content">
+            <div class="fechar-modal" onclick="fecharTrailer()">&times;</div>
+            <iframe id="iframe-trailer" width="100%" height="250" src="" frameborder="0" allowfullscreen></iframe>
+        </div>
+    </div>
+
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
         const firebaseConfig = {
-            apiKey: "AIzaSyBVtBZv2oN0o0KxhCNX6YabaFjTNthL5HI",
-            authDomain: "portalcine-bot.firebaseapp.com",
-            projectId: "portalcine-bot",
-            storageBucket: "portalcine-bot.firebasestorage.app",
-            messagingSenderId: "779561108275",
-            appId: "1:779561108275:web:12496fa1a1ec4d990d7446"
+            apiKey: "AIzaSyBVtBZv2oN0o0KxhCNX6YabaFjTNthL5HI", authDomain: "portalcine-bot.firebaseapp.com",
+            projectId: "portalcine-bot", storageBucket: "portalcine-bot.firebasestorage.app",
+            messagingSenderId: "779561108275", appId: "1:779561108275:web:12496fa1a1ec4d990d7446"
         };
-
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const filmesContainer = document.getElementById('filmes-container');
-        
-        let catalogoCompleto = []; // Memória do catálogo
+        let catalogoCompleto = [];
 
         async function carregarFilmes() {
             try {
                 const snapshot = await db.collection('filmes').get();
-                if (snapshot.empty) {
-                    filmesContainer.innerHTML = '<p>Nenhum título encontrado.</p>';
-                    return;
-                }
-                
-                snapshot.forEach(doc => {
-                    catalogoCompleto.push({ id: doc.id, ...doc.data() });
-                });
-                
-                renderizarCatalogo('Todos'); // Mostra tudo ao abrir
-            } catch (error) {
-                console.error("Erro:", error);
-                filmesContainer.innerHTML = '<p>Erro ao carregar o catálogo.</p>';
-            }
+                if (snapshot.empty) return filmesContainer.innerHTML = '<p>Nenhum título encontrado.</p>';
+                snapshot.forEach(doc => catalogoCompleto.push({ id: doc.id, ...doc.data() }));
+                renderizarCatalogo('Todos'); 
+            } catch (error) { filmesContainer.innerHTML = '<p>Erro ao carregar o catálogo.</p>'; }
         }
 
         function renderizarCatalogo(filtro) {
             filmesContainer.innerHTML = '';
-            
-            // Lógica inteligente de filtro
             const itensFiltrados = catalogoCompleto.filter(item => {
                 if (filtro === 'Todos') return true;
-                
                 const cat = item.categoria.toLowerCase();
                 if (filtro === 'Série') return cat === 'série' || cat === 'serie';
                 if (filtro === 'Dorama') return cat === 'dorama';
-                
-                // Se o filtro for "Filme", pega tudo que NÃO for série nem dorama (ex: Ação, Terror, etc)
                 if (filtro === 'Filme') return cat !== 'série' && cat !== 'serie' && cat !== 'dorama'; 
-                
                 return false;
             });
 
-            if (itensFiltrados.length === 0) {
-                filmesContainer.innerHTML = '<p>Nenhum título nesta categoria.</p>';
-                return;
-            }
-
             itensFiltrados.forEach(item => {
-                const imagemUrl = item.urlCapa || ('https://placehold.co/150x220/333/fff?text=' + encodeURIComponent(item.titulo));
-                
-                // Formata o preço e a cor do botão se for grátis
+                const imagemUrl = item.urlCapa || 'https://placehold.co/150x220/333/fff';
                 const ehGratis = item.preco === 0;
                 const precoDisplay = ehGratis ? "🎁 GRÁTIS" : `R$ ${item.preco.toFixed(2)}`;
                 const classeBotao = ehGratis ? "comprar-btn gratis" : "comprar-btn";
+
+                // Se tiver trailer no banco de dados, cria o botão cinza
+                const botaoTrailer = item.urlTrailer 
+                    ? `<button class="trailer-btn" onclick="abrirTrailer('${item.urlTrailer}')">▶ Trailer</button>` 
+                    : ``;
 
                 const card = document.createElement('div');
                 card.className = 'filme-card';
                 card.innerHTML = `
                     <img src="${imagemUrl}" alt="${item.titulo}">
                     <h3 class="filme-titulo">${item.titulo}</h3>
-                    <button class="${classeBotao}" onclick="comprarFilme('${item.id}')">${precoDisplay}</button>
+                    <div class="botoes-container">
+                        ${botaoTrailer}
+                        <button class="${classeBotao}" onclick="comprarFilme('${item.id}')">${precoDisplay}</button>
+                    </div>
                 `;
                 filmesContainer.appendChild(card);
             });
         }
 
         function filtrarCategoria(categoria, elementoBtn) {
-            // Remove o vermelho de todos os botões e pinta o que foi clicado
             document.querySelectorAll('.categoria-btn').forEach(btn => btn.classList.remove('ativo'));
             elementoBtn.classList.add('ativo');
-            
             renderizarCatalogo(categoria);
         }
 
         function comprarFilme(filmeId) {
             tg.openTelegramLink('https://t.me/PortalCine_Bot?start=comprar_' + filmeId);
             tg.close();
+        }
+
+        // Lógica para converter o link do YouTube e abrir a janela
+        function abrirTrailer(url) {
+            let embedUrl = url;
+            if (url.includes('youtube.com/watch?v=')) embedUrl = url.replace('watch?v=', 'embed/');
+            else if (url.includes('youtu.be/')) embedUrl = url.replace('youtu.be/', 'youtube.com/embed/');
+            
+            document.getElementById('iframe-trailer').src = embedUrl;
+            document.getElementById('trailer-modal').style.display = 'flex';
+        }
+
+        function fecharTrailer() {
+            document.getElementById('trailer-modal').style.display = 'none';
+            document.getElementById('iframe-trailer').src = '';
         }
 
         carregarFilmes();
