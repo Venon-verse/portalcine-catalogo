@@ -54,7 +54,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor a escutar na porta ${PORT}`));
 
 // ==========================================
-// CADASTRO COM SUPORTE A TRAILER E CATEGORIAS
+// CADASTRO SIMPLIFICADO DE FILMES, SÉRIES E DORAMAS
 // ==========================================
 bot.on('photo', async (ctx) => {
     const legenda = ctx.message.caption || '';
@@ -66,22 +66,14 @@ bot.on('photo', async (ctx) => {
             let categoria, preco, idGrupo, nomeArray;
 
             if (comando === '/filme') {
-                if (partes.length < 5) return ctx.reply('❌ Formato: /filme [Categoria] [Preço] [IdGrupo] [Título] [LinkTrailer Opcional]');
+                if (partes.length < 5) return ctx.reply('❌ Formato: /filme [Categoria] [Preço] [IdGrupo] [Título]');
                 categoria = partes[1]; preco = partes[2]; idGrupo = partes[3]; nomeArray = partes.slice(4);
             } else if (comando === '/serie' || comando === '/série') {
-                if (partes.length < 4) return ctx.reply('❌ Formato: /serie [Preço] [IdGrupo] [Título] [LinkTrailer Opcional]');
+                if (partes.length < 4) return ctx.reply('❌ Formato: /serie [Preço] [IdGrupo] [Título]');
                 categoria = 'Série'; preco = partes[1]; idGrupo = partes[2]; nomeArray = partes.slice(3);
             } else if (comando === '/dorama') {
-                if (partes.length < 4) return ctx.reply('❌ Formato: /dorama [Preço] [IdGrupo] [Título] [LinkTrailer Opcional]');
+                if (partes.length < 4) return ctx.reply('❌ Formato: /dorama [Preço] [IdGrupo] [Título]');
                 categoria = 'Dorama'; preco = partes[1]; idGrupo = partes[2]; nomeArray = partes.slice(3);
-            }
-
-            // Procura o link do YouTube no meio do texto
-            let urlTrailer = "";
-            const linkIndex = nomeArray.findIndex(texto => texto.includes('http'));
-            if (linkIndex !== -1) {
-                urlTrailer = nomeArray[linkIndex];
-                nomeArray.splice(linkIndex, 1); // Remove o link para o título ficar limpo
             }
 
             const titulo = nomeArray.join(' ');
@@ -97,11 +89,10 @@ bot.on('photo', async (ctx) => {
                 titulo, categoria, idGrupo, 
                 preco: parseFloat(preco), 
                 urlCapa: imgbb.data.data.url,
-                urlTrailer, // Salva o trailer no banco de dados
                 dataCadastro: admin.firestore.FieldValue.serverTimestamp()
             });
 
-            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ "${titulo}" registado!${urlTrailer ? ' (Com Trailer)' : ''}`);
+            await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ "${titulo}" registado com sucesso!`);
         } catch (e) { 
             console.error(e);
             ctx.reply('❌ Erro no registo. Verifique os dados e tente novamente.'); 
@@ -114,7 +105,6 @@ bot.on('photo', async (ctx) => {
 // ==========================================
 bot.start(async (ctx) => {
     try {
-        // 🚨 BLOQUEIO ANTI-LOOP: Se enviarem o comando num grupo, ele avisa pra chamar no privado.
         if (ctx.chat.type !== 'private') {
             return ctx.reply('🎬 Olá! Para ver o catálogo e fazer compras, por favor, fale comigo no privado clicando no meu nome e enviando /start lá!');
         }
@@ -167,5 +157,4 @@ bot.action(/pagar_(.+)/, async (ctx) => {
     } catch (error) { ctx.reply('❌ Erro ao gerar PIX.'); }
 });
 
-// A linha mágica de "Lavagem Cerebral"
-bot.launch({ dropPendingUpdates: true }).then(() => console.log('🚀 PortalCine Online e Limpo!'));
+bot.launch({ dropPendingUpdates: true }).then(() => console.log('🚀 PortalCine Online (Sem Trailer)!'));
