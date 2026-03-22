@@ -159,4 +159,4 @@ bot.action(/pagar_(.+)/, async (ctx) => {
     } catch (error) { ctx.reply('❌ Erro ao gerar PIX.'); }
 });
 
-bot.launch().then(() => console.log('🚀 PortalCine Online com Trailer e Webhook!'));
+bot.launch({ dropPendingUpdates: true }).then(() => console.log('🚀 PortalCine Online e Limpo!'));
