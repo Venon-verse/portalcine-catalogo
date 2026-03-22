@@ -6,6 +6,7 @@ const { MercadoPagoConfig, Payment } = require('mercadopago');
 const express = require('express');
 const axios = require('axios');
 
+// Inicializações
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -15,6 +16,9 @@ const payment = new Payment(mpClient);
 const urlDoCatalogo = 'https://venon-verse.github.io/portalcine-catalogo/';
 const LINK_DA_RENDER = 'https://portalcine-bot-online.onrender.com';
 
+// ==========================================
+// SERVIDOR WEB E WEBHOOK
+// ==========================================
 const app = express();
 app.use(express.json()); 
 
@@ -50,9 +54,10 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Servidor a escutar na porta ${PORT}`));
 
 // ==========================================
-// CADASTRO COM SUPORTE A TRAILER
+// CADASTRO COM SUPORTE A TRAILER E CATEGORIAS
 // ==========================================
 bot.on('photo', async (ctx) => {
+    // 🚨 Aqui está a correção que fizemos!
     const legenda = ctx.message.caption || '';
     const partes = legenda.split(' ');
     const comando = partes[0].toLowerCase();
@@ -72,12 +77,12 @@ bot.on('photo', async (ctx) => {
                 categoria = 'Dorama'; preco = partes[1]; idGrupo = partes[2]; nomeArray = partes.slice(3);
             }
 
-            // 🚨 MÁGICA DO TRAILER AQUI: Procura se tem um link no final do título
+            // Procura o link do YouTube no meio do texto
             let urlTrailer = "";
             const linkIndex = nomeArray.findIndex(texto => texto.includes('http'));
             if (linkIndex !== -1) {
                 urlTrailer = nomeArray[linkIndex];
-                nomeArray.splice(linkIndex, 1); // Tira o link do título para não ficar feio
+                nomeArray.splice(linkIndex, 1); // Remove o link para o título ficar limpo
             }
 
             const titulo = nomeArray.join(' ');
@@ -93,15 +98,21 @@ bot.on('photo', async (ctx) => {
                 titulo, categoria, idGrupo, 
                 preco: parseFloat(preco), 
                 urlCapa: imgbb.data.data.url,
-                urlTrailer, // Salva o trailer no banco!
+                urlTrailer, // Salva o trailer no banco de dados
                 dataCadastro: admin.firestore.FieldValue.serverTimestamp()
             });
 
             await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, null, `✅ "${titulo}" registado!${urlTrailer ? ' (Com Trailer)' : ''}`);
-        } catch (e) { ctx.reply('❌ Erro no registo. Verifique os dados.'); }
+        } catch (e) { 
+            console.error(e);
+            ctx.reply('❌ Erro no registo. Verifique os dados e tente novamente.'); 
+        }
     }
 });
 
+// ==========================================
+// COMANDOS DE COMPRA E CATÁLOGO
+// ==========================================
 bot.start(async (ctx) => {
     const payload = ctx.startPayload;
     if (payload && payload.startsWith('comprar_')) {
@@ -144,8 +155,8 @@ bot.action(/pagar_(.+)/, async (ctx) => {
         };
         const response = await payment.create({ body });
         await ctx.reply(`\`${response.point_of_interaction.transaction_data.qr_code}\``, { parse_mode: 'Markdown' });
-        await ctx.reply('⏳ *A aguardar pagamento...*');
+        await ctx.reply('⏳ *A aguardar pagamento...* Pode fechar o Telegram, nós te avisaremos quando compensar!');
     } catch (error) { ctx.reply('❌ Erro ao gerar PIX.'); }
 });
 
-bot.launch().then(() => console.log('🚀 PortalCine Online!'));
+bot.launch().then(() => console.log('🚀 PortalCine Online com Trailer e Webhook!'));
