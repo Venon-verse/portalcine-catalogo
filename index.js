@@ -57,7 +57,6 @@ app.listen(PORT, () => console.log(`Servidor a escutar na porta ${PORT}`));
 // CADASTRO COM SUPORTE A TRAILER E CATEGORIAS
 // ==========================================
 bot.on('photo', async (ctx) => {
-    // 🚨 Aqui está a correção que fizemos!
     const legenda = ctx.message.caption || '';
     const partes = legenda.split(' ');
     const comando = partes[0].toLowerCase();
@@ -114,21 +113,30 @@ bot.on('photo', async (ctx) => {
 // COMANDOS DE COMPRA E CATÁLOGO
 // ==========================================
 bot.start(async (ctx) => {
-    const payload = ctx.startPayload;
-    if (payload && payload.startsWith('comprar_')) {
-        const filmeId = payload.split('_')[1];
-        const doc = await db.collection('filmes').doc(filmeId).get();
-        const filme = doc.data();
-        
-        if (filme.preco === 0) {
-            return ctx.reply(`🍿 *Filme:* ${filme.titulo}\n🎁 *Valor:* TOTALMENTE GRÁTIS!`, 
-                Markup.inlineKeyboard([[Markup.button.callback('🎁 Resgatar Acesso Grátis', `pagar_${filmeId}`)]]));
-        } else {
-            return ctx.reply(`🍿 *Filme:* ${filme.titulo}\n💰 *Valor:* R$ ${filme.preco.toFixed(2)}`, 
-                Markup.inlineKeyboard([[Markup.button.callback('💎 Gerar PIX Agora', `pagar_${filmeId}`)]]));
+    try {
+        // 🚨 BLOQUEIO ANTI-LOOP: Se enviarem o comando num grupo, ele avisa pra chamar no privado.
+        if (ctx.chat.type !== 'private') {
+            return ctx.reply('🎬 Olá! Para ver o catálogo e fazer compras, por favor, fale comigo no privado clicando no meu nome e enviando /start lá!');
         }
+
+        const payload = ctx.startPayload;
+        if (payload && payload.startsWith('comprar_')) {
+            const filmeId = payload.split('_')[1];
+            const doc = await db.collection('filmes').doc(filmeId).get();
+            const filme = doc.data();
+            
+            if (filme.preco === 0) {
+                return ctx.reply(`🍿 *Filme:* ${filme.titulo}\n🎁 *Valor:* TOTALMENTE GRÁTIS!`, 
+                    Markup.inlineKeyboard([[Markup.button.callback('🎁 Resgatar Acesso Grátis', `pagar_${filmeId}`)]]));
+            } else {
+                return ctx.reply(`🍿 *Filme:* ${filme.titulo}\n💰 *Valor:* R$ ${filme.preco.toFixed(2)}`, 
+                    Markup.inlineKeyboard([[Markup.button.callback('💎 Gerar PIX Agora', `pagar_${filmeId}`)]]));
+            }
+        }
+        ctx.reply('🎬 Bem-vindo ao PortalCine!', Markup.inlineKeyboard([Markup.button.webApp('🍿 Abrir Catálogo', urlDoCatalogo)]));
+    } catch (error) {
+        console.error("Erro no comando start:", error);
     }
-    ctx.reply('🎬 Bem-vindo ao PortalCine!', Markup.inlineKeyboard([Markup.button.webApp('🍿 Abrir Catálogo', urlDoCatalogo)]));
 });
 
 bot.action(/pagar_(.+)/, async (ctx) => {
@@ -159,4 +167,5 @@ bot.action(/pagar_(.+)/, async (ctx) => {
     } catch (error) { ctx.reply('❌ Erro ao gerar PIX.'); }
 });
 
+// A linha mágica de "Lavagem Cerebral"
 bot.launch({ dropPendingUpdates: true }).then(() => console.log('🚀 PortalCine Online e Limpo!'));
